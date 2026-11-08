@@ -68,3 +68,10 @@ class EmailAnalysisResult(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat() if v else None
         }
+
+class EmailAnalysisRequest(BaseModel):
+    """Request schema for email analysis"""
+    subject: str = Field(..., min_length=1, description="Email subject line")
+    sender: str = Field(..., min_length=1, description="Email sender address")
+    body: str = Field(..., min_length=1, description="Email body content")
+    date: Optional[str] = Field(None, description="Email date (optional)")
