@@ -53,7 +53,9 @@ class GmailService:
         date_filter = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
         
         # Search query
-        query = f'after:{date_filter}'
+        query = f'after:{date_filter} category:primary'
+
+        print(f"[Gmail] Fetching emails with query: {query}, max_results: {max_results}")
         
         try:
             results = self.service.users().messages().list(
@@ -63,13 +65,15 @@ class GmailService:
             ).execute()
             
             messages = results.get('messages', [])
+            print(f"[Gmail] Found {len(messages)} message IDs")
             emails = []
             
             for msg in messages:
                 email_data = self._get_email_details(msg['id'])
                 if email_data:
                     emails.append(email_data)
-            
+                    
+            print(f"[Gmail] Successfully fetched {len(emails)} full emails")
             return emails
             
         except Exception as e:

@@ -12,7 +12,7 @@ load_dotenv(os.path.join(backend_dir, '.env'))
 class GroqAIService(AIServiceBase):
     """Groq-based AI service implementation"""
     
-    def __init__(self, model: str = "openai/gpt-oss-20b"):
+    def __init__(self, model: str = "openai/gpt-oss-120b"):
         self.model = model
         self.api_key = os.getenv("GROQ_API_KEY")
         if not self.api_key:
@@ -86,20 +86,37 @@ class GroqAIService(AIServiceBase):
             print(f"Health check error: {e}")
             return False
     def _build_prompt(
-        self,
-        subject: str,
-        sender: str,
-        body: str,
-        date: Optional[str] = None
-    ) -> str:
+    self,
+    subject: str,
+    sender: str,
+    body: str,
+    date: Optional[str] = None
+) -> str:
         """Build the analysis prompt"""
-        prompt = f"""Analyze this email and determine if it's related to a job application.
+        prompt = f"""You are analyzing emails from the Primary Gmail inbox to identify job application lifecycle events.
 
 Email Details:
 - Subject: {subject}
 - From: {sender}
 - Date: {date or 'Not specified'}
 - Body: {body[:3000]}
+
+TASK: Determine if this email is related to a JOB APPLICATION the user has submitted (not job ads or newsletters).
+
+CLASSIFICATION RULES:
+- IS JOB APPLICATION (is_job_related=true): Email is a response TO the user's application or a follow-up about an application they submitted.
+  Keywords: "your application", "we received your application", "thank you for applying", "interview", "rejection", "offer", "your candidacy", "next steps", "screening call"
+  
+- IS NOT JOB APPLICATION (is_job_related=false): Job ads, newsletters, invitations to apply, generic job alerts
+  Keywords: "apply now", "we're hiring", "job opening", "position available", "click to apply", "new job opportunities", "job alert"
+
+EMAIL_TYPES (only if is_job_related=true):
+- application_confirmation: "We received your application", "Application submitted successfully"
+- interview_invitation: "Interview scheduled", "Let's schedule", "Screening call", "Technical interview"
+- rejection: "We regret to inform", "not selected", "we have decided to move forward", "unfortunately"
+- offer: "We are pleased to offer", "Congratulations", "Job offer"
+- follow_up: "Checking in", "Update on your application", "Status update"
+- other_job_related: Job-related but doesn't fit above categories
 
 Extract the following information and return as JSON:
 {{
@@ -112,13 +129,13 @@ Extract the following information and return as JSON:
   "application_status": "Applied" | "Interviewing" | "Offer" | "Rejected" | "Withdrawn" or null,
   "requires_review": true or false,
   "confidence_score": 0.0 to 1.0,
-  "reasoning": "brief explanation"
+  "reasoning": "brief explanation of classification"
 }}
 
-Important:
+IMPORTANT:
+- is_job_related=true ONLY if email is a response to a submitted application
 - Return null for any missing information
 - Do not guess or hallucinate
-- Be conservative with confidence scores
-- Set requires_review=true if uncertain
+- application_status should match the email_type: application_confirmation→Applied, interview_invitation→Interviewing, rejection→Rejected, offer→Offer
 """
         return prompt

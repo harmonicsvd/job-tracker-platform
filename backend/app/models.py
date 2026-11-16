@@ -17,7 +17,7 @@ class JobApplication(Base):
     company = Column(String, nullable=False)
     role = Column(String, nullable=False)
     status = Column(SQLEnum(JobStatus), default=JobStatus.APPLIED, nullable=False)
-    application_date = Column(DateTime, nullable=False)
+    application_date = Column(DateTime, nullable=True)  # Changed from nullable=False
     email_subject = Column(Text)
     email_sender = Column(String)
     notes = Column(Text, nullable=True)

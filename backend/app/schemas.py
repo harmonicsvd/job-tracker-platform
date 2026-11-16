@@ -7,7 +7,7 @@ class JobApplicationBase(BaseModel):
     company: str = Field(..., min_length=1, max_length=200)
     role: str = Field(..., min_length=1, max_length=200)
     status: JobStatus = JobStatus.APPLIED
-    application_date: datetime
+    application_date: Optional[datetime] = None
     email_subject: Optional[str] = None
     email_sender: Optional[str] = None
     notes: Optional[str] = None
