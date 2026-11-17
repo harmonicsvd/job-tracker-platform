@@ -4,11 +4,14 @@ from app.api.jobs import router
 from app.api.ai import router as ai_router
 from app.api.gmail import router as gmail_router
 from fastapi.middleware.cors import CORSMiddleware
-
+from app.scheduler import start_scheduler
 
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Start the scheduler
+start_scheduler()
 
 app = FastAPI(title="Job Application Tracker")
 app.add_middleware(

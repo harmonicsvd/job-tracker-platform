@@ -20,6 +20,12 @@ def get_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     jobs = db.query(JobApplication).offset(skip).limit(limit).all()
     return jobs
 
+@router.get("/sync-status")
+def get_sync_status():
+    """Get the current sync status"""
+    from app.scheduler import get_sync_status
+    return get_sync_status()
+
 @router.get("/{job_id}", response_model=JobApplicationResponse)
 def get_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(JobApplication).filter(JobApplication.id == job_id).first()
@@ -49,3 +55,5 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
     db.delete(job)
     db.commit()
     return {"message": "Job deleted successfully"}
+
+
