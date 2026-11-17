@@ -17,11 +17,21 @@ export const jobsApi = {
     );
     return response.data;
   },
- 
-  // Update job status (we'll add this endpoint later)
+   // Get sync status
+  getSyncStatus: async () => {
+    const response = await axios.get(`${API_BASE_URL}/api/jobs/sync-status`);
+    return response.data;
+  },
+  
+   // Update job status (uses PATCH)
   updateJobStatus: async (id, status) => {
-    // TODO: Add this endpoint to backend
-    const response = await axios.put(`${API_BASE_URL}/api/jobs/${id}`, { status });
+    const response = await axios.patch(`${API_BASE_URL}/api/jobs/${id}`, { status });
+    return response.data;
+  },
+
+  // Delete job application
+  deleteJob: async (id) => {
+    const response = await axios.delete(`${API_BASE_URL}/api/jobs/${id}`);
     return response.data;
   },
 };
