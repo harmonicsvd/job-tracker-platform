@@ -1,17 +1,31 @@
 import { useState, useEffect } from 'react';
 import { jobsApi } from './api/jobs';
-import { RefreshCw } from 'lucide-react';
- 
+import { RefreshCw, Settings } from 'lucide-react';
+
 function App() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
- 
-  // Fetch jobs on load
+  const [showSettings, setShowSettings] = useState(false);
+  const [syncConfig, setSyncConfig] = useState({
+    daysBack: 7,
+    maxResults: 50
+  });
+
+  // Load saved config on mount
   useEffect(() => {
+    const savedConfig = localStorage.getItem('syncConfig');
+    if (savedConfig) {
+      setSyncConfig(JSON.parse(savedConfig));
+    }
     fetchJobs();
   }, []);
- 
+
+  // Save config when it changes
+  useEffect(() => {
+    localStorage.setItem('syncConfig', JSON.stringify(syncConfig));
+  }, [syncConfig]);
+
   const fetchJobs = async () => {
     try {
       setLoading(true);
@@ -23,12 +37,12 @@ function App() {
       setLoading(false);
     }
   };
- 
+
   const handleSync = async () => {
     try {
       setSyncing(true);
-      await jobsApi.syncGmail();
-      await fetchJobs(); // Refresh the list
+      await jobsApi.syncGmail(syncConfig.daysBack, syncConfig.maxResults);
+      await fetchJobs();
     } catch (error) {
       console.error('Error syncing Gmail:', error);
     } finally {
@@ -36,15 +50,15 @@ function App() {
     }
   };
 
-   return (
+  return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto">
         <header className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Job Application Tracker</h1>
           <p className="text-gray-600">Track your job applications automatically from Gmail</p>
         </header>
- 
-        <div className="mb-6 flex gap-4">
+
+        <div className="mb-6 flex gap-4 items-center">
           <button
             onClick={handleSync}
             disabled={syncing}
@@ -53,8 +67,54 @@ function App() {
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing...' : 'Sync Gmail'}
           </button>
+
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+          >
+            <Settings className="w-4 h-4" />
+            Settings
+          </button>
         </div>
- 
+
+        {showSettings && (
+          <div className="mb-6 p-4 bg-white rounded-lg shadow">
+            <h3 className="text-lg font-semibold mb-4">Sync Configuration</h3>
+            <div className="flex gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Days Back
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={syncConfig.daysBack}
+                  onChange={(e) => setSyncConfig({...syncConfig, daysBack: parseInt(e.target.value)})}
+                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Results
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="200"
+                  value={syncConfig.maxResults}
+                  onChange={(e) => setSyncConfig({...syncConfig, maxResults: parseInt(e.target.value)})}
+                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mt-2">
+              Sync emails from the last {syncConfig.daysBack} days (max {syncConfig.maxResults} emails)
+            </p>
+          </div>
+        )}
+
+        {/* Rest of the table code... */}
         {loading ? (
           <div className="text-center py-12">Loading...</div>
         ) : (
@@ -106,5 +166,5 @@ function App() {
     </div>
   );
 }
- 
+
 export default App;

@@ -1,6 +1,6 @@
 import os
 from groq import Groq
-from typing import Optional
+from typing import Optional, List, Dict
 from app.services.ai_service import AIServiceBase
 from app.schemas_ai import EmailAnalysisResult
 from dotenv import load_dotenv
@@ -99,7 +99,7 @@ Email Details:
 - Subject: {subject}
 - From: {sender}
 - Date: {date or 'Not specified'}
-- Body: {body[:3000]}
+- Body: {body[:1000]}
 
 TASK: Determine if this email is related to a JOB APPLICATION the user has submitted (not job ads or newsletters).
 
@@ -138,4 +138,143 @@ IMPORTANT:
 - Do not guess or hallucinate
 - application_status should match the email_type: application_confirmation→Applied, interview_invitation→Interviewing, rejection→Rejected, offer→Offer
 """
+        return prompt
+
+
+
+    def analyze_emails_batch(
+    self,
+    emails: List[Dict[str, str]],
+    batch_size: int = 5
+) -> List[EmailAnalysisResult]:
+        """
+        Analyze multiple emails in batches to reduce API calls
+        
+        Args:
+            emails: List of email dicts with 'subject', 'sender', 'body', 'date'
+            batch_size: Number of emails to analyze per API call
+        
+        Returns:
+            List of EmailAnalysisResult
+        """
+        results = []
+        
+        # Process in batches
+        for i in range(0, len(emails), batch_size):
+            batch = emails[i:i + batch_size]
+            print(f"[Groq] Processing batch {i//batch_size + 1}/{(len(emails) + batch_size - 1)//batch_size} ({len(batch)} emails)")
+            
+            try:
+                # Build batch prompt
+                batch_prompt = self._build_batch_prompt(batch)
+                
+                # Call Groq API
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert at analyzing job application emails. Extract information accurately and return ONLY valid JSON. Return null for any missing information."
+                        },
+                        {
+                            "role": "user",
+                            "content": batch_prompt
+                        }
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1
+                )
+                
+                # Parse the response
+                result_text = response.choices[0].message.content
+                import json
+                result_dict = json.loads(result_text)
+                
+                # Validate each result
+                if "results" in result_dict:
+                    for item in result_dict["results"]:
+                        results.append(EmailAnalysisResult(**item))
+                else:
+                    # Fallback: single result
+                    results.append(EmailAnalysisResult(**result_dict))
+                    
+            except Exception as e:
+                print(f"[Groq] Batch analysis error: {e}")
+                # Return safe defaults for this batch
+                for email in batch:
+                    results.append(EmailAnalysisResult(
+                        is_job_related=False,
+                        email_type=None,
+                        company_name=None,
+                        job_title=None,
+                        application_date=None,
+                        interview_date=None,
+                        application_status=None,
+                        requires_review=True,
+                        confidence_score=0.0,
+                        reasoning=f"Batch analysis error: {str(e)}"
+                    ))
+        
+        return results
+
+    def _build_batch_prompt(self, emails: List[Dict[str, str]]) -> str:
+        """Build a prompt for analyzing multiple emails at once"""
+        emails_text = ""
+        for idx, email in enumerate(emails, 1):
+            emails_text += f"""
+    EMAIL {idx}:
+    - Subject: {email['subject']}
+    - From: {email['sender']}
+    - Date: {email.get('date', 'Not specified')}
+    - Body: {email['body'][:1000]}
+
+    """
+        
+        prompt = f"""You are analyzing emails from the Primary Gmail inbox to identify job application lifecycle events.
+
+    {emails_text}
+
+    TASK: For EACH email above, determine if it is related to a JOB APPLICATION the user has submitted (not job ads or newsletters).
+
+    CLASSIFICATION RULES:
+    - IS JOB APPLICATION (is_job_related=true): Email is a response TO the user's application or a follow-up about an application they submitted.
+    Keywords: "your application", "we received your application", "thank you for applying", "interview", "rejection", "offer", "your candidacy", "next steps", "screening call"
+    
+    - IS NOT JOB APPLICATION (is_job_related=false): Job ads, newsletters, invitations to apply, generic job alerts
+    Keywords: "apply now", "we're hiring", "job opening", "position available", "click to apply", "new job opportunities", "job alert"
+
+    EMAIL_TYPES (only if is_job_related=true):
+    - application_confirmation: "We received your application", "Application submitted successfully"
+    - interview_invitation: "Interview scheduled", "Let's schedule", "Screening call", "Technical interview"
+    - rejection: "We regret to inform", "not selected", "we have decided to move forward", "unfortunately"
+    - offer: "We are pleased to offer", "Congratulations", "Job offer"
+    - follow_up: "Checking in", "Update on your application", "Status update"
+    - other_job_related: Job-related but doesn't fit above categories
+
+    Return a JSON object with a "results" array containing analysis for each email:
+    {{
+    "results": [
+        {{
+        "is_job_related": true or false,
+        "email_type": "application_confirmation" | "interview_invitation" | "rejection" | "offer" | "follow_up" | "other_job_related" | "not_job_related",
+        "company_name": "company name or null",
+        "job_title": "job title or null",
+        "application_date": "YYYY-MM-DD or null",
+        "interview_date": "YYYY-MM-DD or null",
+        "application_status": "Applied" | "Interviewing" | "Offer" | "Rejected" | "Withdrawn" or null,
+        "requires_review": true or false,
+        "confidence_score": 0.0 to 1.0,
+        "reasoning": "brief explanation of classification"
+        }},
+        // ... more results for each email
+    ]
+    }}
+
+    IMPORTANT:
+    - Return exactly {len(emails)} results in the array
+    - is_job_related=true ONLY if email is a response to a submitted application
+    - Return null for any missing information
+    - Do not guess or hallucinate
+    - application_status should match the email_type: application_confirmation→Applied, interview_invitation→Interviewing, rejection→Rejected, offer→Offer
+    """
         return prompt

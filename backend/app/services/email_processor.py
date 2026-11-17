@@ -10,56 +10,60 @@ class EmailProcessor:
         self.gmail_service = GmailService()
         self.ai_service = GroqAIService()
     
-    def fetch_and_analyze_emails(self, days_back: int = 7, max_results: int = 50) -> List[Dict]:
+    def fetch_and_analyze_emails(self, days_back: int = 7, max_results: int = 50, batch_size: int = 5) -> List[Dict]:
         """
-        Fetch emails from Gmail and analyze them with LLM
+        Fetch emails from Gmail and analyze them with LLM in batches
+        
+        Args:
+            days_back: Number of days to look back
+            max_results: Maximum number of emails to fetch
+            batch_size: Number of emails to analyze per API call
         
         Returns:
             List of dictionaries with email data + LLM analysis
         """
-
-        print(f"[Processor] Starting fetch and analyze...")
+        print(f"[Processor] Starting fetch and analyze with batch_size={batch_size}...")
+        
         # Fetch emails
         emails = self.gmail_service.get_recent_emails(days_back=days_back, max_results=max_results)
         print(f"[Processor] Got {len(emails)} emails from Gmail")
 
-        # Analyze each email
+        # Prepare emails for batch analysis
+        email_data = [
+            {
+                'subject': email['subject'],
+                'sender': email['sender'],
+                'body': email['body'],
+                'date': email['date']
+            }
+            for email in emails
+        ]
+
+        # Analyze in batches
+        print(f"[Processor] Analyzing {len(email_data)} emails in batches of {batch_size}...")
+        analyses = self.ai_service.analyze_emails_batch(email_data, batch_size)
+        
+        # Combine results
         analyzed_emails = []
-        for idx, email in enumerate(emails, 1):
-            try:
-                print(f"[Processor] Analyzing email {idx}/{len(emails)}: {email['subject'][:50]}...")
-                analysis = self.ai_service.analyze_email(
-                    email_subject=email['subject'],
-                    email_sender=email['sender'],
-                    email_body=email['body'],
-                    email_date=email['date']
-                )
-                
-                analyzed_emails.append({
-                    'email': email,
-                    'analysis': analysis
-                })
-                
-                print(f"[Processor] Email {idx} - Job related: {analysis.is_job_related}, Type: {analysis.email_type}")
-                print(f"[Processor]   Reasoning: {analysis.reasoning}")
-            except Exception as e:
-                print(f"Error analyzing email {email['id']}: {e}")
-                analyzed_emails.append({
-                    'email': email,
-                    'analysis': None,
-                    'error': str(e)
-                })
+        for email, analysis in zip(emails, analyses):
+            analyzed_emails.append({
+                'email': email,
+                'analysis': analysis
+            })
+            
+            print(f"[Processor] Email {email['subject'][:50]}... - Job related: {analysis.is_job_related}, Type: {analysis.email_type}")
+            print(f"[Processor]   Reasoning: {analysis.reasoning}")
+        
         print(f"[Processor] Analyzed {len(analyzed_emails)} emails total")
         return analyzed_emails
-    
-    def get_job_applications_only(self, days_back: int = 7, max_results: int = 50) -> List[Dict]:
+    def get_job_applications_only(self, days_back: int = 7, max_results: int = 50,  batch_size: int = 5) -> List[Dict]:
         """
         Fetch and analyze emails, return only job-related ones
         
         Returns:
             List of job application emails with LLM analysis
         """
-        analyzed_emails = self.fetch_and_analyze_emails(days_back, max_results)
+        analyzed_emails = self.fetch_and_analyze_emails(days_back, max_results, batch_size)
         
         # Filter for job-related only
         job_emails = [

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
@@ -75,3 +75,12 @@ class EmailAnalysisRequest(BaseModel):
     sender: str = Field(..., min_length=1, description="Email sender address")
     body: str = Field(..., min_length=1, description="Email body content")
     date: Optional[str] = Field(None, description="Email date (optional)")
+
+
+class BatchEmailAnalysisRequest(BaseModel):
+    """Request schema for batch email analysis"""
+    emails: List[EmailAnalysisRequest] = Field(..., description="List of emails to analyze")
+
+class BatchEmailAnalysisResult(BaseModel):
+    """Result schema for batch email analysis"""
+    results: List[EmailAnalysisResult] = Field(..., description="List of analysis results")

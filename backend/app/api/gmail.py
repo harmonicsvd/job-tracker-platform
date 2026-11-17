@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/gmail", tags=["gmail"])
 def sync_gmail_emails(
     days_back: int = 7,
     max_results: int = 50,
+    batch_size: int = 5,
     db: Session = Depends(get_db)
 ):
     """
@@ -25,7 +26,7 @@ def sync_gmail_emails(
         processor = EmailProcessor()
         
         # Fetch and analyze emails, filter for job applications only
-        job_emails = processor.get_job_applications_only(days_back=days_back, max_results=max_results)
+        job_emails = processor.get_job_applications_only(days_back=days_back, max_results=max_results, batch_size=batch_size)
         print(f"Found {len(job_emails)} job-related emails")
 
         saved_applications = []
