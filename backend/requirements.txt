@@ -14,3 +14,4 @@ beautifulsoup4==4.12.3
 lxml==5.3.0
 groq==0.11.0
 python-dateutil
+psycopg[binary]==3.3.9
