@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { jobsApi } from './api/jobs';
 import { RefreshCw, Settings, Trash2 } from 'lucide-react';
 import Navbar from './components/Navbar';
+import SettingsModal from './components/SettingsModal';
 
 function App() {
   const [jobs, setJobs] = useState([]);
@@ -11,9 +12,10 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [filter, setFilter] = useState('All');
   const [syncConfig, setSyncConfig] = useState({
-    daysBack: 7,
-    maxResults: 50
+    daysBack: 1,
+    maxResults: 100
   });
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Load saved config on mount
   useEffect(() => {
@@ -44,6 +46,17 @@ function App() {
     const interval = setInterval(fetchSyncStatus, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && showSettings) {
+        setShowSettings(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showSettings]);
 
 
   const fetchJobs = async () => {
@@ -79,6 +92,11 @@ function App() {
     }
   };
 
+  const handleSaveConfig = (newConfig) => {
+    setSyncConfig(newConfig);
+    // localStorage will update automatically via useEffect
+  };
+
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this application?')) return;
     
@@ -90,10 +108,13 @@ function App() {
     }
   };
 
-  const filteredJobs = filter === 'All' 
-    ? jobs 
-    : jobs.filter(job => job.status === filter);
-
+    const filteredJobs = jobs.filter(job => {
+    const matchesStatus = filter === 'All' || job.status === filter;
+    const matchesSearch = searchQuery === '' || 
+      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.role.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
   const statusOptions = ['Applied', 'Interviewing', 'Offer', 'Rejected', 'Withdrawn'];
   const filterOptions = ['All', 'Applied', 'Interviewing', 'Offer', 'Rejected', 'Withdrawn'];
 
@@ -104,108 +125,114 @@ function App() {
         onToggleSettings={() => setShowSettings(!showSettings)} 
       />
       
-      <div className="max-w-7xl mx-auto px-8 py-16">
-               {/* Workspace Header */}
-        <header className="mb-16">
-          <p className="text-xs font-medium text-text-light uppercase tracking-widest mb-4">
-            OVERVIEW / 2026
-          </p>
-          <h1 className="text-5xl font-extrabold font-display text-text mb-3 tracking-tight">
-            Your Workspace<span className="text-accent">.</span>
-          </h1>
-          <p className="text-lg text-text-light">
-            A clearer view of your job search.
-          </p>
-        </header>
-
-                {/* Gmail Sync Section */}
-        <div className="mb-16 flex items-center justify-between">
-          {/* Scheduler Info */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${syncStatus?.scheduler_running ? 'bg-accent' : 'bg-gray-400'}`} />
-              <span className="text-sm text-text-light">
-                {syncStatus?.scheduler_running ? 'Scheduler running' : 'Scheduler stopped'}
-              </span>
-            </div>
-            {syncStatus?.last_sync && (
-              <span className="text-sm text-text-light">
-                Last sync: {new Date(syncStatus.last_sync).toLocaleDateString()}
-              </span>
-            )}
-            {syncStatus?.next_sync && (
-              <span className="text-sm text-text-light">
-                Next: {new Date(syncStatus.next_sync).toLocaleDateString()} at {new Date(syncStatus.next_sync).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </span>
-            )}
-          </div>
-          
-          {/* Sync Button */}
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white text-sm font-medium rounded hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync Gmail'}
-          </button>
-        </div>
-
-        {/* Keep the rest of your existing code unchanged */}
-        {showSettings && (
-          <div className="mb-12 p-6 bg-surface rounded border border-border">
-            <h3 className="text-lg font-semibold mb-4 text-text">Sync Configuration</h3>
-            <div className="flex gap-4 items-end">
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">
-                  Days Back
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="365"
-                  value={syncConfig.daysBack}
-                  onChange={(e) => setSyncConfig({...syncConfig, daysBack: parseInt(e.target.value)})}
-                  className="w-32 px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">
-                  Max Results
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="200"
-                  value={syncConfig.maxResults}
-                  onChange={(e) => setSyncConfig({...syncConfig, maxResults: parseInt(e.target.value)})}
-                  className="w-32 px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-            </div>
-            <p className="text-sm text-text-light mt-2">
-              Sync emails from the last {syncConfig.daysBack} days (max {syncConfig.maxResults} emails)
+      <div className="max-w-7xl mx-auto px-8 py-4">
+                  {/* Workspace Header */}
+        <header className="mb-6 flex items-start justify-between gap-8">
+          {/* Left Group */}
+          <div className="flex-1">
+            <p className="text-xs font-medium text-text-light uppercase tracking-widest mb-4">
+              OVERVIEW / 2026
+            </p>
+            <h1 className="text-5xl font-extrabold font-display text-text mb-3 tracking-tight -ml-1.5">
+              Your Workspace<span className="text-accent">.</span>
+            </h1>
+            <p className="text-lg text-text-light">
+              A clearer view of your job search.
             </p>
           </div>
-        )}
-
-        <div className="mb-12 flex gap-3 items-center">
-          <span className="text-sm font-medium text-text">Filter:</span>
-          {filterOptions.map((status) => (
+          
+          {/* Right Group - Sync */}
+          <div className="flex flex-col items-end gap-3 min-w-[220px]">
             <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                filter === status
-                  ? 'bg-accent text-white'
-                  : 'bg-gray-200 text-text hover:bg-gray-300'
-              }`}
+              onClick={handleSync}
+              disabled={syncing}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white text-sm font-medium rounded hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {status}
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync Gmail'}
             </button>
             
-          ))}
+            {/* Scheduler Status - Single Line */}
+            <div className="flex items-center justify-end gap-2 text-xs text-text-light">
+              <div className={`w-1.5 h-1.5 rounded-full ${syncStatus?.scheduler_running ? 'bg-accent' : 'bg-gray-400'}`} />
+              <span>{syncStatus?.scheduler_running ? 'Running' : 'Stopped'}</span>
+              {syncStatus?.next_sync && (
+                <>
+                  <span className="text-text-light/50">·</span>
+                  <span>
+                    Next: {new Date(syncStatus.next_sync).toLocaleDateString()} {new Date(syncStatus.next_sync).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </header>
+                {/* Statistics */}
+        <div className="mb-2 grid grid-cols-5 gap-6 py-5 border-b border-border">
+          <div>
+            <p className="text-3xl font-extrabold font-display text-text">{jobs.length}</p>
+            <p className="text-xs font-medium text-text-light uppercase tracking-wider mt-1">Total</p>
+          </div>
+          <div>
+            <p className="text-3xl font-extrabold font-display text-text">{jobs.filter(j => j.status === 'Applied').length}</p>
+            <p className="text-xs font-medium text-text-light uppercase tracking-wider mt-1">Applied</p>
+          </div>
+          <div>
+            <p className="text-3xl font-extrabold font-display text-accent">{jobs.filter(j => j.status === 'Interviewing').length}</p>
+            <p className="text-xs font-medium text-text-light uppercase tracking-wider mt-1">Interviewing</p>
+          </div>
+          <div>
+            <p className="text-3xl font-extrabold font-display text-accent">{jobs.filter(j => j.status === 'Offer').length}</p>
+            <p className="text-xs font-medium text-text-light uppercase tracking-wider mt-1">Offers</p>
+          </div>
+          <div>
+            <p className="text-3xl font-extrabold font-display text-status-rejected">{jobs.filter(j => j.status === 'Rejected').length}</p>
+            <p className="text-xs font-medium text-text-light uppercase tracking-wider mt-1">Rejected</p>
+          </div>
+        </div>
+        
+
+              {/* Applications Section */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-2xl font-semibold font-display text-text mb-4">Applications.</h2>
+            
+            {/* Search Input */}
+                        {/* Search Input */}
+            <div className="relative w-64">
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 text-text-light/50">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.35-4.35"></path>
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search company or role"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-4 py-2 border-b border-border text-sm focus:outline-none focus:border-accent placeholder:text-text-light/50 bg-transparent transition-colors"
+                aria-label="Search applications"
+              />
+            </div>
+          </div>
           
+          {/* Filter Tabs */}
+          <div className="flex gap-8 border-b border-border mb-4">
+            {filterOptions.map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilter(status)}
+                className={`pb-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
+                  filter === status
+                    ? 'text-text border-b-2 border-accent'
+                    : 'text-text-light hover:text-text'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
         </div>
           
           
@@ -213,6 +240,7 @@ function App() {
           <div className="text-center py-12 text-text">Loading...</div>
         ) : (
           <div className="bg-surface rounded border border-border overflow-hidden">
+            
             <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -224,15 +252,16 @@ function App() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredJobs.map((job) => (
+                {
+                filteredJobs.map((job) => (
                   <tr key={job.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text">
+                    <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-text">
                       {job.company}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light">
+                    <td className="px-6 py-3 whitespace-nowrap text-sm text-text-light">
                       {job.role}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="px-6 py-3 whitespace-nowrap text-sm">
                       <select
                         value={job.status}
                         onChange={(e) => handleStatusChange(job.id, e.target.value)}
@@ -264,10 +293,13 @@ function App() {
                   </tr>
                 ))}
               </tbody>
+
             </table>
             {filteredJobs.length === 0 && (
               <div className="text-center py-12 text-text-light">
-                {filter === 'All' 
+                {searchQuery 
+                  ? `No applications matching "${searchQuery}"`
+                  : filter === 'All'
                   ? 'No job applications found. Click "Sync Gmail" to fetch your applications.'
                   : `No applications with status "${filter}"`
                 }
@@ -276,6 +308,14 @@ function App() {
           </div>
         )}
       </div>
+                <SettingsModal 
+        isOpen={showSettings} 
+        onClose={() => setShowSettings(false)} 
+        syncStatus={syncStatus}
+        syncConfig={syncConfig}
+        onSaveConfig={handleSaveConfig}
+      />
+    
     </div>
   );
 }
