@@ -9,7 +9,11 @@ export const jobsApi = {
     const response = await axios.get(`${API_BASE_URL}/api/jobs`);
     return response.data;
   },
- 
+    // Create new job application
+  createJob: async (jobData) => {
+    const response = await axios.post(`${API_BASE_URL}/api/jobs/`, jobData);
+    return response.data;
+  },
   // Sync Gmail
   syncGmail: async (daysBack = 7, maxResults = 50) => {
     const response = await axios.post(

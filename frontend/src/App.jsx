@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { jobsApi } from './api/jobs';
-import { RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { RefreshCw, Settings, Trash2, ChevronDown } from 'lucide-react';
 import Navbar from './components/Navbar';
 import SettingsModal from './components/SettingsModal';
+import AddApplicationModal from './components/AddApplicationModal';
+
 
 function App() {
   const [jobs, setJobs] = useState([]);
@@ -15,8 +17,10 @@ function App() {
     daysBack: 1,
     maxResults: 100
   });
+  const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  
   // Load saved config on mount
   useEffect(() => {
     const savedConfig = localStorage.getItem('syncConfig');
@@ -108,6 +112,14 @@ function App() {
     }
   };
 
+  const handleAddApplication = async (jobData) => {
+    try {
+      await jobsApi.createJob(jobData);
+      await fetchJobs();
+    } catch (error) {
+      console.error('Error adding application:', error);
+    }
+  };
     const filteredJobs = jobs.filter(job => {
     const matchesStatus = filter === 'All' || job.status === filter;
     const matchesSearch = searchQuery === '' || 
@@ -193,47 +205,82 @@ function App() {
         
 
               {/* Applications Section */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-2xl font-semibold font-display text-text mb-4">Applications.</h2>
-            
-            {/* Search Input */}
-                        {/* Search Input */}
-            <div className="relative w-64">
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 text-text-light/50">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <path d="m21 21-4.35-4.35"></path>
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search company or role"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-4 py-2 border-b border-border text-sm focus:outline-none focus:border-accent placeholder:text-text-light/50 bg-transparent transition-colors"
-                aria-label="Search applications"
-              />
-            </div>
-          </div>
-          
-          {/* Filter Tabs */}
-          <div className="flex gap-8 border-b border-border mb-4">
-            {filterOptions.map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilter(status)}
-                className={`pb-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
-                  filter === status
-                    ? 'text-text border-b-2 border-accent'
-                    : 'text-text-light hover:text-text'
-                }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
+               
+<div className="mb-4">
+
+  {/* Row 1: Applications Heading */}
+  <div className="mb-3">
+    <h2 className="text-2xl font-semibold font-display text-text">
+      Applications.
+    </h2>
+  </div>
+
+  {/* Row 2: Filters + Search + Add Application */}
+  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-border mb-4">
+
+    {/* Left: Status Filters */}
+    <div className="flex min-w-0 gap-6 overflow-x-auto">
+      {filterOptions.map((status) => (
+        <button
+          key={status}
+          onClick={() => setFilter(status)}
+          className={`h-11 shrink-0 border-b-2 text-sm font-medium transition-colors
+            focus-visible:outline-2 focus-visible:outline-accent
+            ${
+              filter === status
+                ? 'text-text border-accent'
+                : 'text-text-light border-transparent hover:text-text'
+            }`}
+        >
+          {status}
+        </button>
+      ))}
+    </div>
+
+    {/* Right: Search + Add Application */}
+    <div className="flex items-center gap-2 pb-3 lg:pb-0">
+
+      {/* Search Input - No Underline */}
+      <div className="relative w-64 border-b border-transparent focus-within:border-accent transition-colors">
+
+        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-text-light/60 pointer-events-none">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
         </div>
+
+        <input
+          type="text"
+          placeholder="Search company or role"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search applications"
+          className="search-input w-full pl-8 pr-2 py-2 bg-transparent border-0 rounded-none text-sm text-text placeholder:text-text-light/50 outline-none focus:outline-none focus:ring-0"
+        />
+      </div>
+
+      {/* Add Application Button */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="shrink-0 whitespace-nowrap px-4 py-2 bg-accent text-white text-sm font-medium rounded-md hover:bg-accent/90 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        +
+      </button>
+
+    </div>
+  </div>
+</div>
+
           
           
         {loading ? (
@@ -261,22 +308,25 @@ function App() {
                     <td className="px-6 py-3 whitespace-nowrap text-sm text-text-light">
                       {job.role}
                     </td>
-                    <td className="px-6 py-3 whitespace-nowrap text-sm">
-                      <select
-                        value={job.status}
-                        onChange={(e) => handleStatusChange(job.id, e.target.value)}
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          job.status === 'Applied' ? 'bg-status-applied text-white' :
-                          job.status === 'Interviewing' ? 'bg-status-interviewing text-white' :
-                          job.status === 'Offer' ? 'bg-status-offer text-white' :
-                          job.status === 'Rejected' ? 'bg-status-rejected text-white' :
-                          'bg-status-withdrawn text-white'
-                        }`}
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status} value={status}>{status}</option>
-                        ))}
-                      </select>
+                                        <td className="px-6 py-3 whitespace-nowrap text-sm">
+                      <div className="relative inline-block w-32">
+                        <select
+                          value={job.status}
+                          onChange={(e) => handleStatusChange(job.id, e.target.value)}
+                          className={`w-full appearance-none pr-8 py-1.5 px-3 rounded-md text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 ${
+                            job.status === 'Applied' ? 'bg-status-applied/20 text-status-applied' :
+                            job.status === 'Interviewing' ? 'bg-status-interviewing/20 text-status-interviewing' :
+                            job.status === 'Offer' ? 'bg-status-offer/20 text-status-offer' :
+                            job.status === 'Rejected' ? 'bg-status-rejected/20 text-status-rejected' :
+                            'bg-status-withdrawn/20 text-status-withdrawn'
+                          }`}
+                        >
+                          {statusOptions.map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-text-light pointer-events-none" />
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light">
                       {job.application_date ? new Date(job.application_date).toLocaleDateString() : 'N/A'}
@@ -315,7 +365,11 @@ function App() {
         syncConfig={syncConfig}
         onSaveConfig={handleSaveConfig}
       />
-    
+          <AddApplicationModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddApplication}
+      />
     </div>
   );
 }

@@ -48,3 +48,8 @@ body {
 button, a, input, select {
   transition: all 150ms ease;
 }
+
+.search-input:focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
