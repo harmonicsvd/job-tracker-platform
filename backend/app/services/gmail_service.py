@@ -7,6 +7,7 @@ from google.oauth2.credentials import Credentials
 from dotenv import load_dotenv
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
+import time
 
 # Load .env
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,7 +41,7 @@ class GmailService:
     
     def get_recent_emails(self, days_back: int = 7, max_results: int = 50) -> List[Dict]:
         """
-        Fetch recent emails from Gmail
+        Fetch recent emails from Gmail with batched fetching to avoid quota limits
         
         Args:
             days_back: How many days back to fetch emails
@@ -57,28 +58,70 @@ class GmailService:
 
         print(f"[Gmail] Fetching emails with query: {query}, max_results: {max_results}")
         
+        # Batch configuration
+        batch_size = 30  # Safe batch size for Gmail quota
+        cooldown_seconds = 60  # 1 minute cooldown between batches
+        
+        emails = []
+        page_token = None
+        total_fetched = 0
+        batch_number = 0
+        
         try:
-            results = self.service.users().messages().list(
-                userId='me',
-                q=query,
-                maxResults=max_results
-            ).execute()
-            
-            messages = results.get('messages', [])
-            print(f"[Gmail] Found {len(messages)} message IDs")
-            emails = []
-            
-            for msg in messages:
-                email_data = self._get_email_details(msg['id'])
-                if email_data:
-                    emails.append(email_data)
+            while total_fetched < max_results:
+                batch_number += 1
+                # Calculate how many to fetch in this batch
+                remaining = max_results - total_fetched
+                current_batch_size = min(batch_size, remaining)
+                
+                print(f"[Gmail] Batch {batch_number}: Fetching {current_batch_size} emails (total: {total_fetched}/{max_results})")
+                
+                # Fetch message IDs for this batch
+                results = self.service.users().messages().list(
+                    userId='me',
+                    q=query,
+                    maxResults=current_batch_size,
+                    pageToken=page_token
+                ).execute()
+                
+                messages = results.get('messages', [])
+                if not messages:
+                    print(f"[Gmail] No more messages found")
+                    break
+                
+                print(f"[Gmail] Batch {batch_number}: Found {len(messages)} message IDs")
+                
+                # Fetch email details for this batch
+                for msg in messages:
+                    email_data = self._get_email_details(msg['id'])
+                    if email_data:
+                        emails.append(email_data)
+                        total_fetched += 1
+                    # Small delay between individual email fetches
+                    time.sleep(0.1)
+                
+                print(f"[Gmail] Batch {batch_number}: Fetched {len(emails)} emails total")
+                
+                # Check if we need to fetch more
+                if total_fetched >= max_results:
+                    break
+                
+                # Get next page token for pagination
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    print(f"[Gmail] No more pages available")
+                    break
+                
+                # Cooldown before next batch to respect Gmail quota
+                print(f"[Gmail] Waiting {cooldown_seconds} seconds for Gmail quota cooldown...")
+                time.sleep(cooldown_seconds)
                     
             print(f"[Gmail] Successfully fetched {len(emails)} full emails")
             return emails
             
         except Exception as e:
             print(f"Error fetching emails: {e}")
-            return []
+            return emails  # Return whatever we've fetched so far
     
     def _get_email_details(self, message_id: str) -> Optional[Dict]:
         """Get full email details including body"""
@@ -125,3 +168,88 @@ class GmailService:
                     body += part_body
         
         return body
+    
+
+    def get_recent_emails_streaming(self, days_back: int = 7, max_results: int = 50, batch_size: int = 30) -> List[Dict]:
+        """
+        Fetch emails in streaming batches - yields batches as they arrive
+        This allows immediate Groq analysis to avoid rate limits
+        
+        Args:
+            days_back: How many days back to fetch emails
+            max_results: Maximum number of emails to fetch
+            batch_size: Number of emails per Gmail batch
+        
+        Yields:
+            List of email dictionaries for each batch
+        """
+        # Calculate date filter
+        date_filter = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
+        
+        # Search query
+        query = f'after:{date_filter} category:primary'
+
+        print(f"[Gmail] Streaming fetch with query: {query}, max_results: {max_results}, batch_size: {batch_size}")
+        
+        # Cooldown between batches (in seconds)
+        cooldown_seconds = 0
+        
+        page_token = None
+        total_fetched = 0
+        batch_number = 0
+        
+        try:
+            while total_fetched < max_results:
+                batch_number += 1
+                # Calculate how many to fetch in this batch
+                remaining = max_results - total_fetched
+                current_batch_size = min(batch_size, remaining)
+                
+                print(f"[Gmail] Streaming Batch {batch_number}: Fetching {current_batch_size} emails (total: {total_fetched}/{max_results})")
+                
+                # Fetch message IDs for this batch
+                results = self.service.users().messages().list(
+                    userId='me',
+                    q=query,
+                    maxResults=current_batch_size,
+                    pageToken=page_token
+                ).execute()
+                
+                messages = results.get('messages', [])
+                if not messages:
+                    print(f"[Gmail] No more messages found")
+                    break
+                
+                print(f"[Gmail] Streaming Batch {batch_number}: Found {len(messages)} message IDs")
+                
+                # Fetch email details for this batch
+                batch_emails = []
+                for msg in messages:
+                    email_data = self._get_email_details(msg['id'])
+                    if email_data:
+                        batch_emails.append(email_data)
+                        total_fetched += 1
+                    # Small delay between individual email fetches
+                    time.sleep(0.1)
+                
+                print(f"[Gmail] Streaming Batch {batch_number}: Yielding {len(batch_emails)} emails")
+                yield batch_emails
+                
+                # Check if we need to fetch more
+                if total_fetched >= max_results:
+                    break
+                
+                # Get next page token for pagination
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    print(f"[Gmail] No more pages available")
+                    break
+                
+                # Cooldown before next batch to respect Gmail quota
+                print(f"[Gmail] Waiting {cooldown_seconds} seconds for Gmail quota cooldown...")
+                time.sleep(cooldown_seconds)
+                    
+            print(f"[Gmail] Streaming complete: Fetched {total_fetched} emails total")
+            
+        except Exception as e:
+            print(f"Error in streaming fetch: {e}")
