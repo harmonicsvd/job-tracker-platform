@@ -8,6 +8,8 @@ from app.models import JobApplication, JobStatus
 from app.schemas import JobApplicationCreate, JobApplicationResponse
 from app.schemas_ai import EmailType
 from dateutil import parser as dateutil_parser
+from app.auth import get_current_user
+from app.models import User
 
 router = APIRouter(prefix="/api/gmail", tags=["gmail"])
 
@@ -16,6 +18,7 @@ def sync_gmail_emails(
     days_back: int = 7,
     max_results: int = 50,
     batch_size: int = 5,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -23,32 +26,48 @@ def sync_gmail_emails(
     """
     try:
         # Initialize processor
-        processor = EmailProcessor()
-        
+        processor = EmailProcessor(user_id=current_user.id, db=db)
+
+        # Get already processed Gmail message IDs for this user
+        processed_message_ids = set(
+            row.gmail_message_id for row in
+            db.query(JobApplication.gmail_message_id)
+            .filter(JobApplication.user_id == current_user.id)
+            .filter(JobApplication.gmail_message_id.isnot(None))
+            .all()
+        )
+        print(f"Found {len(processed_message_ids)} already processed message IDs")
+
         # Fetch and analyze emails, filter for job applications only
         job_emails = processor.get_job_applications_only(days_back=days_back, max_results=max_results, batch_size=batch_size)
         print(f"Found {len(job_emails)} job-related emails")
 
         saved_applications = []
-        
+
         for item in job_emails:
             email = item['email']
             analysis = item['analysis']
 
+            # Skip if already processed this Gmail message
+            if email['id'] in processed_message_ids:
+                print(f"Skipping already processed message: {email['subject'][:50]}...")
+                continue
+
             print(f"Email: {email['subject'][:50]}...")
             print(f"Type: {analysis.email_type}")
-            
+
             # Skip if not a real application (job ads, etc.)
             if analysis.email_type in ['other_job_related', 'not_job_related']:
                 print("  -> Skipping (job ad)")
                 continue
-            
-            # Check if this company already has an application
+
+            # Check if this company already has an application for THIS USER
             existing = db.query(JobApplication).filter(
                 JobApplication.company == analysis.company_name,
-                JobApplication.email_subject == email['subject']
+                JobApplication.email_subject == email['subject'],
+                JobApplication.user_id == current_user.id  # Filter by user
             ).first()
-            
+
             print(f"  -> Checking for existing company: '{analysis.company_name}', found: {existing is not None}")
             # Create new job application
             # Convert application date if available
@@ -136,6 +155,8 @@ def sync_gmail_emails(
                 status = email_type_mapping.get(analysis.email_type, JobStatus.APPLIED)
             
             new_application = JobApplication(
+                user_id=current_user.id,  # Associate with authenticated user
+                gmail_message_id=email['id'],  # Track Gmail message ID
                 company=analysis.company_name or "Unknown",
                 role=analysis.job_title or "Unknown",
                 status=status,
@@ -155,6 +176,25 @@ def sync_gmail_emails(
         
     except Exception as e:
         db.rollback()
+        error_str = str(e)
+        # Detect quota errors
+        if "Quota exceeded" in error_str or "rateLimitExceeded" in error_str:
+            if "gmail.googleapis.com" in error_str:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error_type": "gmail_quota_exceeded",
+                        "message": "Gmail API quota exceeded. Please wait a few minutes and try again."
+                    }
+                )
+            elif "groq" in error_str.lower():
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error_type": "groq_quota_exceeded",
+                        "message": "Groq AI quota exceeded. Please change API key or wait for daily reset."
+                    }
+                )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")

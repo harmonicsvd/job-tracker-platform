@@ -2,12 +2,15 @@ from app.services.gmail_service import GmailService
 from app.services.groq_service import GroqAIService
 from app.schemas_ai import EmailAnalysisResult
 from typing import List, Dict
+from sqlalchemy.orm import Session
 
 class EmailProcessor:
     """Service to fetch emails and analyze them with LLM"""
     
-    def __init__(self):
-        self.gmail_service = GmailService()
+    def __init__(self, user_id: int = None, db: Session = None):
+        self.user_id = user_id
+        self.db = db
+        self.gmail_service = GmailService(user_id=user_id, db=db)
         self.ai_service = GroqAIService()
     
     def fetch_and_analyze_emails(self, days_back: int = 7, max_results: int = 50, batch_size: int = 5) -> List[Dict]:
@@ -52,7 +55,6 @@ class EmailProcessor:
             })
             
             print(f"[Processor] Email {email['subject'][:50]}... - Job related: {analysis.is_job_related}, Type: {analysis.email_type}")
-            #print(f"[Processor]   Reasoning: {analysis.reasoning}")
         
         print(f"[Processor] Analyzed {len(analyzed_emails)} emails total")
         return analyzed_emails

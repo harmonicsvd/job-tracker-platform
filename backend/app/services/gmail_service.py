@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import time
+from sqlalchemy.orm import Session
+from app.models import GmailToken
 
 # Load .env
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,28 +20,47 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 class GmailService:
     """Service for interacting with Gmail API"""
     
-    def __init__(self):
+    def __init__(self, user_id: int = None, db: Session = None):
+        self.user_id = user_id
+        self.db = db
         self.creds = self._get_credentials()
-        self.service = build('gmail', 'v1', credentials=self.creds)
+        if self.creds:
+            self.service = build('gmail', 'v1', credentials=self.creds)
     
     def _get_credentials(self):
-        """Get valid credentials"""
-        token_file = os.getenv("GMAIL_TOKEN_FILE", "token.json")
-        credentials_file = os.getenv("GMAIL_CREDENTIALS_FILE", "credentials.json")
+        """Get valid credentials from database for the user"""
+        if not self.user_id or not self.db:
+            raise Exception("User ID and database session required")
         
-        creds = None
-        if os.path.exists(token_file):
-            creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+        # Get token from database
+        gmail_token = self.db.query(GmailToken).filter(
+            GmailToken.user_id == self.user_id
+        ).first()
         
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                raise Exception("No valid credentials found. Run auth_gmail.py first")
+        if not gmail_token:
+            raise Exception("No Gmail token found for user")
+        
+        from google.oauth2.credentials import Credentials
+        creds = Credentials(
+            token=gmail_token.access_token,
+            refresh_token=gmail_token.refresh_token,
+            token_uri=gmail_token.token_uri,
+            client_id=gmail_token.client_id,
+            client_secret=gmail_token.client_secret,
+            scopes=gmail_token.scopes.split(',')
+        )
+        
+        # Refresh if expired
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            # Update in database
+            gmail_token.access_token = creds.token
+            gmail_token.expires_at = creds.expiry
+            self.db.commit()
         
         return creds
     
-    def get_recent_emails(self, days_back: int = 7, max_results: int = 50) -> List[Dict]:
+    def get_recent_emails(self, days_back: int = 7, max_results: int = 50,  db: Session = None) -> List[Dict]:
         """
         Fetch recent emails from Gmail with batched fetching to avoid quota limits
         
@@ -50,6 +71,8 @@ class GmailService:
         Returns:
             List of email dictionaries with id, subject, sender, body, date
         """
+        if db:
+            self.db = db
         # Calculate date filter
         date_filter = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
         

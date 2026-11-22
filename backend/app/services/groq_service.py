@@ -200,7 +200,11 @@ IMPORTANT:
                     
             except Exception as e:
                 print(f"[Groq] Batch analysis error: {e}")
-                # Return safe defaults for this batch
+                error_str = str(e)
+                # Re-raise quota errors so they propagate to the sync endpoint
+                if "Rate limit reached" in error_str or "429" in error_str:
+                    raise e
+                # Return safe defaults for other errors
                 for email in batch:
                     results.append(EmailAnalysisResult(
                         is_job_related=False,
