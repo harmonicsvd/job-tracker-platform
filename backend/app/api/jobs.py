@@ -20,7 +20,7 @@ def create_job(job: JobApplicationCreate, current_user: User = Depends(get_curre
 
 @router.get("/", response_model=List[JobApplicationResponse])
 def get_jobs(current_user: User = Depends(get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    jobs = db.query(JobApplication).filter(JobApplication.user_id == current_user.id).offset(skip).limit(limit).all()
+    jobs = db.query(JobApplication).filter(JobApplication.user_id == current_user.id).order_by(JobApplication.application_date.desc()).offset(skip).limit(limit).all()
     return jobs
 
 @router.get("/sync-status")
