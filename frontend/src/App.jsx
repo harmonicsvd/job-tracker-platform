@@ -4,9 +4,13 @@ import { RefreshCw, Settings, Trash2, ChevronDown } from 'lucide-react';
 import Navbar from './components/Navbar';
 import SettingsModal from './components/SettingsModal';
 import AddApplicationModal from './components/AddApplicationModal';
-
-
+import { useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
+import toast from 'react-hot-toast';
+ 
 function App() {
+  const { user, loading: authLoading } = useAuth();
+
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -20,15 +24,16 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  
   // Load saved config on mount
   useEffect(() => {
     const savedConfig = localStorage.getItem('syncConfig');
     if (savedConfig) {
       setSyncConfig(JSON.parse(savedConfig));
     }
-    fetchJobs();
-  }, []);
+    if (user) {
+      fetchJobs();
+    }
+  }, [user]);
 
   // Save config when it changes
   useEffect(() => {
@@ -62,6 +67,16 @@ function App() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [showSettings]);
 
+  // Show loading state while checking auth
+  if (authLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>;
+  }
+
+  // Redirect to login if not authenticated
+  if (!user) {
+    return <Login />;
+  }
+
 
   const fetchJobs = async () => {
     try {
@@ -75,17 +90,48 @@ function App() {
     }
   };
 
-  const handleSync = async () => {
-    try {
-      setSyncing(true);
-      await jobsApi.syncGmail(syncConfig.daysBack, syncConfig.maxResults);
-      await fetchJobs();
-    } catch (error) {
-      console.error('Error syncing Gmail:', error);
-    } finally {
-      setSyncing(false);
+
+const handleSync = async () => {
+  try {
+    setSyncing(true);
+
+    await jobsApi.syncGmail(syncConfig.daysBack, syncConfig.maxResults);
+    await fetchJobs();
+
+    toast.success('Sync completed successfully!', {
+      id: 'gmail-sync-success',
+      duration: 5000,
+    });
+
+  } catch (error) {
+    console.error('Sync failed:', error);
+
+    const errorType = error.response?.data?.detail?.error_type;
+
+    if (errorType === 'gmail_quota_exceeded') {
+      toast.error('Wait a few minutes and try again.', {
+        id: 'gmail-quota-exceeded',
+        duration: 10000,
+      });
+
+    } else if (errorType === 'groq_quota_exceeded') {
+      toast.error('Change your API key or wait for the quota to reset.', {
+        id: 'groq-quota-exceeded',
+        duration: 10000,
+      });
+
+    } else {
+      toast.error('Sync failed. Please try again.', {
+        id: 'gmail-sync-error',
+        duration: 10000,
+      });
     }
-  };
+
+  } finally {
+    setSyncing(false);
+  }
+};
+
 
   const handleStatusChange = async (id, newStatus) => {
     try {
@@ -158,7 +204,11 @@ function App() {
             <button
               onClick={handleSync}
               disabled={syncing}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white text-sm font-medium rounded hover:opacity-90 disabled:opacity-50 transition-opacity"
+              className={`inline-flex items-center gap-2 px-5 py-2.5 text-white text-sm font-medium rounded transition-all ${
+                syncing
+                  ? 'bg-accent/70 cursor-not-allowed'
+                  : 'bg-accent hover:bg-accent/90 hover:scale-105 active:scale-95'
+              }`}
             >
               <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
               {syncing ? 'Syncing...' : 'Sync Gmail'}

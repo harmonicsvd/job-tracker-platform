@@ -90,13 +90,13 @@ function GmailSyncSettings({ config, onSave, syncStatus }) {
       <div className="flex gap-3 pt-4 border-t border-border">
         <button
           onClick={handleSave}
-          className="px-4 py-2 bg-accent text-white text-sm font-medium rounded hover:opacity-90 transition-opacity"
+          className="px-4 py-2 bg-accent text-white text-sm font-medium rounded hover:bg-accent/90 hover:scale-105 active:scale-95 transition-all"
         >
           Save Changes
         </button>
         <button
           onClick={handleCancel}
-          className="px-4 py-2 border border-border text-text text-sm font-medium rounded hover:bg-gray-100 transition-colors"
+          className="px-4 py-2 border border-border text-text text-sm font-medium rounded hover:bg-gray-100 hover:scale-105 active:scale-95 transition-all"
         >
           Cancel
         </button>

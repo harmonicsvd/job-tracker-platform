@@ -177,8 +177,8 @@ def sync_gmail_emails(
     except Exception as e:
         db.rollback()
         error_str = str(e)
-        # Detect quota errors
-        if "Quota exceeded" in error_str or "rateLimitExceeded" in error_str:
+        # Detect quota errors (both Gmail and Groq)
+        if "Quota exceeded" in error_str or "rateLimitExceeded" in error_str or "Rate limit reached" in error_str:
             if "gmail.googleapis.com" in error_str:
                 raise HTTPException(
                     status_code=429,
@@ -192,7 +192,7 @@ def sync_gmail_emails(
                     status_code=429,
                     detail={
                         "error_type": "groq_quota_exceeded",
-                        "message": "Groq AI quota exceeded. Please change API key or wait for daily reset."
+                        "message": "Groq AI quota exceeded. Please wait a minute and try again."
                     }
                 )
         raise HTTPException(status_code=500, detail=str(e))
